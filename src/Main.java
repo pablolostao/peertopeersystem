@@ -31,27 +31,27 @@ public class Main {
             Indexer s = new Indexer(port);
         }
         else if(type.equals("peer")){
-            Integer port_client = DEFAULT_PEER_PORT;
-            Integer port_server = DEFAULT_INDEXER_PORT;
+            Integer peer_port = DEFAULT_PEER_PORT;
+            Integer indexer_port = DEFAULT_INDEXER_PORT;
             Boolean retry = true;
             while (retry){
                 try{
                     System.out.println("Choose client port: (Default 30302)");
                     String port_s = reader.readLine().trim();
                     if (!port_s.equals("")){
-                        port_client = Integer.parseInt(port_s);
+                        peer_port = Integer.parseInt(port_s);
                     }
                     System.out.println("Choose server port: (Default 30301)");
                     port_s = reader.readLine().trim();
                     if (!port_s.equals("")){
-                        port_server = Integer.parseInt(port_s);
+                        indexer_port = Integer.parseInt(port_s);
                     }
                     retry = false;
                 }catch (NumberFormatException e){
                     System.out.println("Port number not valid");
                 }
             }
-            Peer c = new Peer(port_client,port_server);
+            Peer c = new Peer(peer_port,indexer_port);
         }
         else{
             System.out.println("You can only choose 'indexer' or 'peer'");

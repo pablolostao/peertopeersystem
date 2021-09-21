@@ -44,34 +44,49 @@ public class Indexer {
         public Server(Socket socket,ConcurrentHashMap<String, HashSet<String>> fileToClientId){
             this.socket=socket;
             this.fileToClientIds = fileToClientId;
-            this.id = getId(this.socket);
-            System.out.println("New connection with client at " + this.id);
         }
 
-        private String getId(Socket socket){
-            return socket.getInetAddress() +":"+socket.getPort();
+        private String getId(Integer port){
+            return socket.getInetAddress() +":"+port.toString();
         }
 
         public void run() {
             try {
-                // Initializing output stream using the socket's output stream
                 ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
                 out.flush();
-                // Initializing input stream using the socket's input stream
                 ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+                Integer port = (Integer) in.readObject();
+                this.id = getId(port);
+                System.out.println("New connection with client at " + this.id);
                 out.writeObject("Connection established. Your ID is "+this.id);
                 while (true) {
-                    // Read the request object received from the Peer
                     IndexerRequest request = (IndexerRequest) in.readObject();
+                    File file = null;
                     switch (request.getRequestType()){
                         case REGISTER:
-                            File file = (File) request.getRequestData();
+                            System.out.println("registering ");
+                            file = (File) request.getRequestData();
                             if (!fileToClientIds.contains(file.getName())) {
                                 fileToClientIds.put(file.getName(),new HashSet<String>());
                             }
                             fileToClientIds.get(file.getName()).add(this.id);
                             out.writeObject("File "+file.getName()+" registered successfully for client "+this.id);
+                            break;
+                        case UNREGISTER:
+                            System.out.println("unregistering ");
+                            file = (File) request.getRequestData();
+                            fileToClientIds.get(file.getName()).remove(this.id);
+                            out.writeObject("File "+file.getName()+" unregistered successfully for client "+this.id);
+                            break;
+                        case LOOKFOR:
+                            System.out.println("looking for ");
+                            String name = (String) request.getRequestData();
+                            HashSet<String> set = fileToClientIds.get(name);
+                            out.reset();
+                            out.writeObject(set);
+                            break;
                     }
+                    System.out.println(fileToClientIds.toString());
 
                 }
             } catch (Exception exc) {
