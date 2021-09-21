@@ -50,6 +50,13 @@ public class Indexer {
             return socket.getInetAddress() +":"+port.toString();
         }
 
+        private void registerFile(String name){
+            if (!fileToClientIds.contains(name)) {
+                fileToClientIds.put(name,new HashSet<String>());
+            }
+            fileToClientIds.get(name).add(this.id);
+        }
+
         public void run() {
             try {
                 ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
@@ -62,9 +69,18 @@ public class Indexer {
                 while (true) {
                     IndexerRequest request = (IndexerRequest) in.readObject();
                     File file = null;
+                    File[] files = null;
                     switch (request.getRequestType()){
+                        case REGISTER_FOLDER:
+                            System.out.println("registering folder");
+                            files = (File[]) request.getRequestData();
+                            for (File child : files) {
+                                registerFile(child.getName());
+                            }
+                            out.writeObject("Folder registered successfully for client "+this.id);
+                            break;
                         case REGISTER:
-                            System.out.println("registering ");
+                            System.out.println("registering file");
                             file = (File) request.getRequestData();
                             if (!fileToClientIds.contains(file.getName())) {
                                 fileToClientIds.put(file.getName(),new HashSet<String>());

@@ -1,6 +1,8 @@
 import java.io.*;
 import java.net.Socket;
-import java.util.HashSet;
+import java.nio.file.*;
+import java.util.HashMap;
+import static java.nio.file.StandardWatchEventKinds.*;
 
 public class Peer {
     Socket socket;
@@ -33,9 +35,13 @@ public class Peer {
     private static class _Client extends Thread{
         Integer indexer_port;
         Integer peer_port;
+        HashMap<String,String> fileNameToFilePath=null;
+        Path shared_directory=null;
+
         public _Client(Integer peer_port,Integer indexer_port){
             this.indexer_port =indexer_port;
             this.peer_port =peer_port;
+            this.fileNameToFilePath = new HashMap<String,String>();
         }
         public void run() {
             try{
@@ -47,7 +53,37 @@ public class Peer {
                 String response = (String) in.readObject();
                 System.out.println(response);
                 BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-                int choice=0;
+                Boolean retry = true;
+                IndexerRequest request = null;
+                while(retry){
+                    try{
+                        System.out.println("Insert the path of the shared directory:");
+                        String dirPath = reader.readLine().trim();
+                        File dir = new File(dirPath);
+                        if (dir.isDirectory()){
+                            File[] files = dir.listFiles();
+                            if(files !=null){
+                                request = new IndexerRequest();
+                                request.setRequestType(IndexerRequestType.REGISTER_FOLDER);
+                                request.setRequestData(files);
+                                out.reset();
+                                out.writeObject(request);
+                            }
+                            shared_directory = dir.toPath();
+                            retry = false;
+                        }else{
+                            System.out.println("The path is not a directory");
+                        }
+                    }catch (NumberFormatException e){
+                        System.out.println("Path not valid");
+                    }
+                }
+                WatchService watcher = FileSystems.getDefault().newWatchService();
+                shared_directory.register(watcher, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY);
+                new _Watcher(socket,watcher).start();
+                System.out.println("loooooooool");
+                //WatchKey key = shared_directory.register(watcher, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY);
+                /*int choice=0;
                 while(true){
                     Boolean retry = true;
                     while (retry){
@@ -105,12 +141,48 @@ public class Peer {
                             break;
                     }
 
-                }
+                }*/
 
             }catch (Exception e){
                 System.err.println(e.getMessage());
             }
 
+        }
+
+        private static class _Watcher extends Thread{
+            Socket socket = null;
+            WatchService watcher = null;
+            public _Watcher(Socket socket,WatchService watcher) throws IOException{
+                this.socket =socket;
+                this.watcher = watcher;
+            }
+
+            void processEvents() {
+                while(true) {
+                    System.out.println("Start while");
+                    WatchKey key;
+                    try {
+                        key = watcher.take();
+                    } catch (InterruptedException x) {
+                        System.out.println("Exception");
+                        return;
+                    }
+                    for (WatchEvent<?> event: key.pollEvents()) {
+                        WatchEvent.Kind kind = event.kind();
+                        if (kind == OVERFLOW) {
+                            continue;
+                        }
+                        System.out.println("Event:");
+                        System.out.println(kind.toString());
+                    }
+                    System.out.println("Finish while");
+                    key.reset();
+                }
+            }
+            public void run() {
+                System.out.println("Thread started");
+                processEvents();
+            }
         }
 
     }
