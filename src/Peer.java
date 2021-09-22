@@ -127,7 +127,7 @@ public class Peer {
                 }
                 WatchService watcher = FileSystems.getDefault().newWatchService();
                 shared_directory.register(watcher, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY);
-                new _Watcher(in,out,watcher).start();
+                new _Watcher(in,out,watcher,fileNameToFile).start();
                 int choice=0;
                 while(true){
                     retry = true;
@@ -201,10 +201,12 @@ public class Peer {
             ObjectOutputStream out = null;
             ObjectInputStream in = null;
             WatchService watcher = null;
-            public _Watcher(ObjectInputStream in, ObjectOutputStream out,WatchService watcher) throws IOException{
+            HashMap<String,File> fileNameToFile = null;
+            public _Watcher(ObjectInputStream in, ObjectOutputStream out,WatchService watcher,HashMap<String,File> fileNameToFile) throws IOException{
                 this.in =in;
                 this.out =out;
                 this.watcher = watcher;
+                this.fileNameToFile=fileNameToFile;
             }
 
             void processEvents() throws Exception{
@@ -239,6 +241,9 @@ public class Peer {
                             WatchEvent<Path> ev = (WatchEvent<Path>)event;
                             Path filepath = ev.context();
                             File file = new File(filepath.toString());
+                            if(fileNameToFile.containsKey(file.getName())){
+                                fileNameToFile.remove(file.getName());
+                            }
                             request = new IndexerRequest();
                             request.setRequestType(IndexerRequestType.UNREGISTER);
                             request.setRequestData(file);
