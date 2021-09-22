@@ -51,7 +51,7 @@ public class Indexer {
         }
 
         private void registerFile(String name){
-            if (!fileToClientIds.contains(name)) {
+            if (!fileToClientIds.containsKey(name)) {
                 fileToClientIds.put(name,new HashSet<String>());
             }
             fileToClientIds.get(name).add(this.id);
@@ -72,7 +72,6 @@ public class Indexer {
                     File[] files = null;
                     switch (request.getRequestType()){
                         case REGISTER_FOLDER:
-                            System.out.println("registering folder");
                             files = (File[]) request.getRequestData();
                             for (File child : files) {
                                 registerFile(child.getName());
@@ -80,22 +79,16 @@ public class Indexer {
                             out.writeObject("Folder registered successfully for client "+this.id);
                             break;
                         case REGISTER:
-                            System.out.println("registering file");
                             file = (File) request.getRequestData();
-                            if (!fileToClientIds.contains(file.getName())) {
-                                fileToClientIds.put(file.getName(),new HashSet<String>());
-                            }
-                            fileToClientIds.get(file.getName()).add(this.id);
+                            registerFile(file.getName());
                             out.writeObject("File "+file.getName()+" registered successfully for client "+this.id);
                             break;
                         case UNREGISTER:
-                            System.out.println("unregistering ");
                             file = (File) request.getRequestData();
                             fileToClientIds.get(file.getName()).remove(this.id);
                             out.writeObject("File "+file.getName()+" unregistered successfully for client "+this.id);
                             break;
                         case LOOKFOR:
-                            System.out.println("looking for ");
                             String name = (String) request.getRequestData();
                             HashSet<String> set = fileToClientIds.get(name);
                             out.reset();

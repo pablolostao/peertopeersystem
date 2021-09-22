@@ -1,19 +1,24 @@
 import java.io.*;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.*;
 import java.util.HashMap;
+import java.util.HashSet;
+
 import static java.nio.file.StandardWatchEventKinds.*;
 
 public class Peer {
-    Socket socket;
+    HashMap<String,File> fileNameToFile=null;
+
     public Peer(Integer peer_port,Integer server_port) throws NumberFormatException, IOException
     {
-        new Peer._Client(peer_port,server_port).start();
-        /*ServerSocket serverSocket=null;
+        fileNameToFile = new HashMap<String,File>();
+        new Peer._Client(peer_port,server_port,fileNameToFile).start();
+        ServerSocket serverSocket=null;
         Socket socket = null;
         try{
-            serverSocket = new ServerSocket(port);
-            System.out.println("Client started. Listening for requests on port "+port.toString()+"...\n");
+            serverSocket = new ServerSocket(peer_port);
+            System.out.println("Peer listening for requests on port "+peer_port.toString()+"...\n");
         }
         catch(IOException e)
         {
@@ -28,20 +33,57 @@ public class Peer {
             {
                 System.out.println("I/O error: " +e);
             }
-            new Client.Client(socket).start();
-        }*/
+            new Peer._Server(socket,fileNameToFile).start();
+        }
 
+    }
+    private static class _Server extends Thread{
+        HashMap<String,File> fileNameToFile = null;
+        Socket socket = null;
+
+        public _Server(Socket socket, HashMap<String,File> fileNameToFile){
+            this.fileNameToFile = fileNameToFile;
+            this.socket =socket;
+        }
+        public void run() {
+            try {
+                ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                out.flush();
+                ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+                String fileName = (String) in.readObject();
+                File internalFile = fileNameToFile.get(fileName);
+                if (internalFile!=null){
+                    byte[] mybytearray  = new byte [(int)internalFile.length()];
+                    FileInputStream fis = new FileInputStream(internalFile);
+                    BufferedInputStream bis = new BufferedInputStream(fis);
+                    bis.read(mybytearray,0,mybytearray.length);
+                    FileResponse response = new FileResponse();
+                    response.setSize(mybytearray.length);
+                    response.setRequestData(mybytearray);
+                    out.writeObject(response);
+                    out.flush();
+                    out.close();
+                    in.close();
+                    fis.close();
+                    bis.close();
+                    System.out.println("File transferred");
+                }
+            }catch (Exception e){
+                System.err.println(e);
+            }
+
+        }
     }
     private static class _Client extends Thread{
         Integer indexer_port;
         Integer peer_port;
-        HashMap<String,String> fileNameToFilePath=null;
         Path shared_directory=null;
+        HashMap<String,File> fileNameToFile = null;
 
-        public _Client(Integer peer_port,Integer indexer_port){
+        public _Client(Integer peer_port,Integer indexer_port,HashMap<String,File> fileNameToFile){
+            this.fileNameToFile = fileNameToFile;
             this.indexer_port =indexer_port;
             this.peer_port =peer_port;
-            this.fileNameToFilePath = new HashMap<String,String>();
         }
         public void run() {
             try{
@@ -68,30 +110,33 @@ public class Peer {
                                 request.setRequestData(files);
                                 out.reset();
                                 out.writeObject(request);
+                                for (File child : files) {
+                                    fileNameToFile.put(child.getName(),child);
+                                }
                             }
                             shared_directory = dir.toPath();
                             retry = false;
                         }else{
                             System.out.println("The path is not a directory");
                         }
+                        response = (String) in.readObject();
+                        System.out.println(response);
                     }catch (NumberFormatException e){
                         System.out.println("Path not valid");
                     }
                 }
                 WatchService watcher = FileSystems.getDefault().newWatchService();
                 shared_directory.register(watcher, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY);
-                new _Watcher(socket,watcher).start();
-                System.out.println("loooooooool");
-                //WatchKey key = shared_directory.register(watcher, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY);
-                /*int choice=0;
+                new _Watcher(in,out,watcher).start();
+                int choice=0;
                 while(true){
-                    Boolean retry = true;
+                    retry = true;
                     while (retry){
                         try{
                             System.out.println("Choose action");
-                            System.out.println("[1] To register files");
-                            System.out.println("[2] To unregister files");
-                            System.out.println("[3] To look for file");
+                            System.out.println("[1] To look for alternatives to download a file");
+                            System.out.println("[2] To download a specific file from specific peer");
+                            System.out.println("[3] To exit");
                             String line = reader.readLine().trim();
                             choice = Integer.parseInt(line);
                             retry = false;
@@ -99,33 +144,9 @@ public class Peer {
                             System.out.println("Choice not valid");
                         }
                     }
-                    String path = null;
-                    File file = null;
-                    IndexerRequest request = null;
-                    switch (choice){
+                    boolean exit = false;
+                    switch (choice) {
                         case 1:
-                            System.out.println("\nEnter path of the file you want to register:");
-                            path = reader.readLine().trim();
-                            file = new File(path);
-                            request = new IndexerRequest();
-                            request.setRequestType(IndexerRequestType.REGISTER);
-                            request.setRequestData(file);
-                            out.writeObject(request);
-                            response = (String) in.readObject();
-                            System.out.println(response);
-                            break;
-                        case 2:
-                            System.out.println("\nEnter path of the file you want to unregister:");
-                            path = reader.readLine().trim();
-                            file = new File(path);
-                            request = new IndexerRequest();
-                            request.setRequestType(IndexerRequestType.UNREGISTER);
-                            request.setRequestData(file);
-                            out.writeObject(request);
-                            response = (String) in.readObject();
-                            System.out.println(response);
-                            break;
-                        case 3:
                             System.out.println("\nEnter the name of the file you are looking for:");
                             String name = reader.readLine().trim();
                             request = new IndexerRequest();
@@ -139,9 +160,36 @@ public class Peer {
                                 System.out.println("You can find the file "+name+" in the following peers: "+set.toString());
                             }
                             break;
+                        case 2:
+                            System.out.println("\nEnter the name of the file you are looking for:");
+                            String fileName = reader.readLine().trim();
+                            System.out.println("\nEnter the peer you want to download from (address:port):");
+                            String peer = reader.readLine().trim();
+                            String[] address_port=peer.split(":");
+                            Socket fileSocket = new Socket(address_port[0],Integer.parseInt(address_port[1]));
+                            ObjectOutputStream outFile = new ObjectOutputStream(fileSocket.getOutputStream());
+                            ObjectInputStream inFile = new ObjectInputStream(fileSocket.getInputStream());
+                            outFile.writeObject(fileName);
+                            FileResponse res = (FileResponse) inFile.readObject();
+                            byte [] mybytearray  = res.getRequestData();
+                            Path pathToFile = shared_directory.resolve(fileName);
+                            OutputStream fileOutputStream = new FileOutputStream(pathToFile.toFile());
+                            BufferedOutputStream  bufferedOutputStream= new BufferedOutputStream(fileOutputStream);
+                            bufferedOutputStream.write(mybytearray, 0 ,mybytearray.length );
+                            bufferedOutputStream.flush();
+                            fileOutputStream.close();
+                            bufferedOutputStream.close();
+                            outFile.close();
+                            inFile.close();
+                            break;
+                        case 3:
+                            exit = true;
+                            break;
                     }
-
-                }*/
+                    if(exit){
+                        break;
+                    }
+                }
 
             }catch (Exception e){
                 System.err.println(e.getMessage());
@@ -150,16 +198,19 @@ public class Peer {
         }
 
         private static class _Watcher extends Thread{
-            Socket socket = null;
+            ObjectOutputStream out = null;
+            ObjectInputStream in = null;
             WatchService watcher = null;
-            public _Watcher(Socket socket,WatchService watcher) throws IOException{
-                this.socket =socket;
+            public _Watcher(ObjectInputStream in, ObjectOutputStream out,WatchService watcher) throws IOException{
+                this.in =in;
+                this.out =out;
                 this.watcher = watcher;
             }
 
-            void processEvents() {
+            void processEvents() throws Exception{
+                IndexerRequest request = null;
+                String response = null;
                 while(true) {
-                    System.out.println("Start while");
                     WatchKey key;
                     try {
                         key = watcher.take();
@@ -169,42 +220,48 @@ public class Peer {
                     }
                     for (WatchEvent<?> event: key.pollEvents()) {
                         WatchEvent.Kind kind = event.kind();
-                        if (kind == OVERFLOW) {
+                        if (kind == OVERFLOW || kind == ENTRY_MODIFY) {
                             continue;
                         }
-                        System.out.println("Event:");
-                        System.out.println(kind.toString());
+                        if (kind == ENTRY_CREATE) {
+                            WatchEvent<Path> ev = (WatchEvent<Path>)event;
+                            Path filepath = ev.context();
+                            File file = new File(filepath.toString());
+                            request = new IndexerRequest();
+                            request.setRequestType(IndexerRequestType.REGISTER);
+                            request.setRequestData(file);
+                            out.writeObject(request);
+                            response = (String) in.readObject();
+                            System.out.println(response);
+                            continue;
+                        }
+                        if (kind == ENTRY_DELETE) {
+                            WatchEvent<Path> ev = (WatchEvent<Path>)event;
+                            Path filepath = ev.context();
+                            File file = new File(filepath.toString());
+                            request = new IndexerRequest();
+                            request.setRequestType(IndexerRequestType.UNREGISTER);
+                            request.setRequestData(file);
+                            out.writeObject(request);
+                            response = (String) in.readObject();
+                            System.out.println(response);
+                            continue;
+                        }
                     }
-                    System.out.println("Finish while");
-                    key.reset();
+                    boolean valid = key.reset();
+                    if (!valid) {
+                        break;
+                    }
                 }
             }
             public void run() {
-                System.out.println("Thread started");
-                processEvents();
+                try{
+                    processEvents();
+                }catch (Exception e){
+                    System.err.println(e);
+                }
             }
         }
 
     }
-/*    private class Server extends Thread{
-        private Socket socket= null;
-
-        public Server(Socket socket){
-            this.socket=socket;
-            System.out.println("New connection with peer at " + socket.getInetAddress());
-        }
-        public void run() {
-            try {
-                // Initializing output stream using the socket's output stream
-                ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-                out.flush();
-                // Initializing input stream using the socket's input stream
-                ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
-                String clientIp = socket.getInetAddress().getHostAddress();
-                out.writeObject("Your IP is: " + clientIp);
-            } catch (Exception exc) {
-                System.err.println(exc.getMessage());
-            }
-        }
-    }*/
 }
