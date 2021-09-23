@@ -1,9 +1,13 @@
 import java.io.Serializable;
 
+//File to make it easy to make requests through the socket
 public class IndexerRequest implements Serializable {
+    //Request type
     private IndexerRequestType type;
+    //Data
     private Object data;
 
+    //Getters and setters
     public IndexerRequestType getRequestType() {
         return type;
     }
