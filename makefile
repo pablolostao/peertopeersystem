@@ -2,22 +2,16 @@ JC = javac
 JR = java
 JFLAGS  = -g -Wall
 
-default: all
+default: compile
 
-all:
-	$(JC) *.java
+compile:
+	mkdir out
+	$(JC) -d out/ ./src/*.java 
 
 clean:
-	$(RM) *.class
+	$(RM) -r out
 
-run_server:
-	$(JR) Server
+run:
+	$(JR) -classpath out Main
 
-run_client:
-	$(JR) Client
 
-run_test:
-	$(JR) Test
-
-run_test2:
-	$(JR) Test2

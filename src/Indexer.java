@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class Indexer {
     //Index. It is a hashmap whose key is the name of the file and de value is a hashset of the peers with that file
-    public static ConcurrentHashMap<String, HashSet<String>> fileToClientIds = new ConcurrentHashMap<String, HashSet<String>>();
+    public ConcurrentHashMap<String, HashSet<String>> fileToClientIds = new ConcurrentHashMap<String, HashSet<String>>();
 
     public Indexer(Integer port) throws NumberFormatException, IOException
     {
@@ -40,7 +40,7 @@ public class Indexer {
 
     private class Server extends Thread{
         //General index
-        private static ConcurrentHashMap<String, HashSet<String>> fileToClientIds = null;
+        private ConcurrentHashMap<String, HashSet<String>> fileToClientIds = null;
         //Socket for the peer
         private Socket socket= null;
         //ID of the peer (address:port)
