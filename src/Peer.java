@@ -2,21 +2,26 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.*;
-import java.util.HashMap;
 import java.util.HashSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static java.nio.file.StandardWatchEventKinds.*;
 
+//General class for a peer, it has another class for server part and another one for client part
 public class Peer {
-    HashMap<String,File> fileNameToFile=null;
+
+    //Index of local files
+    ConcurrentHashMap<String,File> fileNameToFile=null;
+
 
     public Peer(Integer peer_port,Integer server_port) throws NumberFormatException, IOException
     {
-        fileNameToFile = new HashMap<String,File>();
+        fileNameToFile = new ConcurrentHashMap<String,File>();
         new Peer._Client(peer_port,server_port,fileNameToFile).start();
         ServerSocket serverSocket=null;
         Socket socket = null;
         try{
+            //Create a server socket to listen for requests
             serverSocket = new ServerSocket(peer_port);
             System.out.println("Peer listening for requests on port "+peer_port.toString()+"...\n");
         }
@@ -24,9 +29,11 @@ public class Peer {
         {
             e.printStackTrace();
         }
+        //Always listening
         while(true)
         {
             try{
+                //For each new connection we create a thread Server, that manages request for one peer
                 socket = serverSocket.accept();
             }
             catch(IOException e)
@@ -37,21 +44,26 @@ public class Peer {
         }
 
     }
+
+    //Class to act as a server (retrieve files)
     private static class _Server extends Thread{
-        HashMap<String,File> fileNameToFile = null;
+        ConcurrentHashMap<String,File> fileNameToFile = null;
         Socket socket = null;
 
-        public _Server(Socket socket, HashMap<String,File> fileNameToFile){
+        public _Server(Socket socket, ConcurrentHashMap<String,File> fileNameToFile){
             this.fileNameToFile = fileNameToFile;
             this.socket =socket;
         }
+        //Thread itself
         public void run() {
             try {
+                //Get the file they are looking for
                 ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
                 out.flush();
                 ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
                 String fileName = (String) in.readObject();
                 File internalFile = fileNameToFile.get(fileName);
+                //If it exists, return it
                 if (internalFile!=null){
                     byte[] mybytearray  = new byte [(int)internalFile.length()];
                     FileInputStream fis = new FileInputStream(internalFile);
@@ -74,17 +86,21 @@ public class Peer {
 
         }
     }
+
+    //Class to act as a client (user actions)
     private static class _Client extends Thread{
         Integer indexer_port;
         Integer peer_port;
         Path shared_directory=null;
-        HashMap<String,File> fileNameToFile = null;
+        ConcurrentHashMap<String,File> fileNameToFile = null;
 
-        public _Client(Integer peer_port,Integer indexer_port,HashMap<String,File> fileNameToFile){
+        public _Client(Integer peer_port,Integer indexer_port,ConcurrentHashMap<String,File> fileNameToFile){
             this.fileNameToFile = fileNameToFile;
             this.indexer_port =indexer_port;
             this.peer_port =peer_port;
         }
+
+        //Thread itself
         public void run() {
             try{
                 Socket socket = new Socket("localhost",this.indexer_port);
@@ -97,6 +113,7 @@ public class Peer {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
                 Boolean retry = true;
                 IndexerRequest request = null;
+                //Get shared folder
                 while(retry){
                     try{
                         System.out.println("Insert the path of the shared directory:");
@@ -125,10 +142,12 @@ public class Peer {
                         System.out.println("Path not valid");
                     }
                 }
+                //Create another thread to watch directory events
                 WatchService watcher = FileSystems.getDefault().newWatchService();
                 shared_directory.register(watcher, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY);
                 new _Watcher(in,out,watcher,fileNameToFile).start();
                 int choice=0;
+                //The client waits for a user action
                 while(true){
                     retry = true;
                     while (retry){
@@ -146,6 +165,7 @@ public class Peer {
                     }
                     boolean exit = false;
                     switch (choice) {
+                        //We request to the indexer information about one file
                         case 1:
                             System.out.println("\nEnter the name of the file you are looking for:");
                             String name = reader.readLine().trim();
@@ -160,6 +180,7 @@ public class Peer {
                                 System.out.println("You can find the file "+name+" in the following peers: "+set.toString());
                             }
                             break;
+                        //We request to another peer a file
                         case 2:
                             System.out.println("\nEnter the name of the file you are looking for:");
                             String fileName = reader.readLine().trim();
@@ -182,6 +203,7 @@ public class Peer {
                             outFile.close();
                             inFile.close();
                             break;
+                        //Exit
                         case 3:
                             exit = true;
                             break;
@@ -201,14 +223,15 @@ public class Peer {
             ObjectOutputStream out = null;
             ObjectInputStream in = null;
             WatchService watcher = null;
-            HashMap<String,File> fileNameToFile = null;
-            public _Watcher(ObjectInputStream in, ObjectOutputStream out,WatchService watcher,HashMap<String,File> fileNameToFile) throws IOException{
+            ConcurrentHashMap<String,File> fileNameToFile = null;
+            public _Watcher(ObjectInputStream in, ObjectOutputStream out,WatchService watcher,ConcurrentHashMap<String,File> fileNameToFile) throws IOException{
                 this.in =in;
                 this.out =out;
                 this.watcher = watcher;
                 this.fileNameToFile=fileNameToFile;
             }
 
+            //Method to look for events and act as needed
             void processEvents() throws Exception{
                 IndexerRequest request = null;
                 String response = null;
